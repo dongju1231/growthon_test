@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>웹 위치 · 음성 · 카메라 테스트</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="container header-inner">
+      <div>
+        <h1>웹 기능 테스트</h1>
+        <p class="subtitle">항목을 눌러 펼쳐서 테스트하세요</p>
+      </div>
+      <button type="button" class="btn-header" id="btn-toggle-all">모두 펼치기</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 최상단 필수 경고 (해당 시에만 표시) -->
+    <div id="https-warning" class="alert alert-danger hidden">
+      <strong>HTTPS 아님!</strong> 현재 보안 접속이 아니므로 위치와 카메라가 차단될 수 있습니다.
+    </div>
+    <div id="inapp-warning" class="alert alert-warning hidden">
+      <strong>인앱 브라우저 감지:</strong> 기본 브라우저(Safari / Chrome)에서도 비교 테스트하세요.
+    </div>
+
+    <!-- 1. 위치 확인 -->
+    <details class="accordion-card" id="sec-location">
+      <summary class="accordion-summary">
+        <div class="summary-title">
+          <span class="step-num">1</span>
+          <span>위치 · 휴식처 알림</span>
+        </div>
+        <div class="summary-right">
+          <span class="status-pill status-idle" id="gps-status-pill">대기 중</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </div>
+      </summary>
+
+      <div class="accordion-body">
+        <!-- 버튼 영역 (상단 집중 배치) -->
+        <div class="control-group">
+          <div class="btn-grid btn-grid-3">
+            <button type="button" class="btn btn-primary" id="btn-start-gps">추적 시작</button>
+            <button type="button" class="btn btn-secondary" id="btn-stop-gps" disabled>추적 중지</button>
+            <button type="button" class="btn btn-outline" id="btn-single-gps">1회 측정</button>
+          </div>
+          <div class="btn-grid btn-grid-3">
+            <button type="button" class="btn btn-sm btn-outline" id="btn-target-here">목표: 현위치</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-target-70m">목표 +70m</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-target-30m">목표 +30m</button>
+          </div>
+          <div class="btn-grid btn-grid-2">
+            <button type="button" class="btn btn-sm btn-accent" id="btn-sim-approach">실내 가상 테스트 (75m→30m)</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="btn-reset-alert">알림 재무장</button>
+          </div>
+        </div>
+
+        <!-- 도보 구간 & 알림 동작 조건 -->
+        <div class="condition-box">
+          <div class="condition-row">
+            <label class="checkbox-inline checkbox-strong">
+              <input type="checkbox" id="chk-walk-only" checked />
+              도보 구간에서만 알림 작동
+            </label>
+            <span class="status-pill status-ok" id="walk-state-pill">도보 구간</span>
+          </div>
+
+          <div class="segment-control" role="radiogroup" aria-label="현재 이동 구간 선택">
+            <label class="segment-option">
+              <input type="radio" name="travel-mode" value="walk" id="mode-walk" checked />
+              <span>도보 구간</span>
+            </label>
+            <label class="segment-option">
+              <input type="radio" name="travel-mode" value="transit" id="mode-transit" />
+              <span>비도보 (버스·차량)</span>
+            </label>
+          </div>
+
+          <div class="condition-checks">
+            <label class="checkbox-inline">
+              <input type="checkbox" id="chk-speed-walk" checked />
+              GPS 속도 자동 판별 (9 km/h 초과 시 비도보 처리)
+            </label>
+            <label class="checkbox-inline">
+              <input type="checkbox" id="chk-dedupe" checked />
+              중복 알림 방지 (진입 시 1회 알림, 반경+15m 이탈 후 재무장)
+            </label>
+          </div>
+        </div>
+
+        <!-- 50m 휴식처 진입 화면 알림 배너 -->
+        <div id="rest-alert-banner" class="alert alert-success alert-banner hidden" role="alert">
+          <div class="alert-banner-content">
+            <strong id="rest-alert-title">휴식처 50m 이내 진입!</strong>
+            <p id="rest-alert-desc" class="alert-banner-desc"></p>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline" id="btn-dismiss-alert">확인</button>
+        </div>
+
+        <!-- 결과 영역 (하단 배치) -->
+        <div class="distance-panel" id="distance-panel">
+          <div class="distance-header">
+            <span>목표까지 거리</span>
+            <span class="status-pill status-idle" id="proximity-pill">목표 미설정</span>
+          </div>
+          <div class="distance-number" id="val-distance">- m</div>
+          <div class="progress-track">
+            <div class="progress-bar" id="distance-bar" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div id="accuracy-warning" class="alert alert-warning hidden">
+          GPS 오차가 설정 반경보다 큽니다. 실외에서 측정해 보세요.
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-box">
+            <span class="metric-label">현재 위도</span>
+            <strong class="metric-value" id="val-lat">-</strong>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">현재 경도</span>
+            <strong class="metric-value" id="val-lng">-</strong>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">GPS 오차</span>
+            <strong class="metric-value" id="val-accuracy">-</strong>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">이동 속도 / 판정</span>
+            <strong class="metric-value" id="val-speed">- (도보)</strong>
+          </div>
+          <div class="metric-box metric-box-full">
+            <span class="metric-label">갱신 시각 / 횟수</span>
+            <strong class="metric-value" id="val-updated">-</strong>
+          </div>
+        </div>
+
+        <!-- 세부 좌표/반경 설정 (접이식 서브 패널) -->
+        <details class="sub-details">
+          <summary>목표 좌표 · 반경 직접 설정</summary>
+          <div class="sub-details-body">
+            <div class="form-grid">
+              <label class="form-field">
+                <span>목표 위도</span>
+                <input type="number" step="0.000001" id="input-target-lat" placeholder="37.566500" />
+              </label>
+              <label class="form-field">
+                <span>목표 경도</span>
+                <input type="number" step="0.000001" id="input-target-lng" placeholder="126.978000" />
+              </label>
+              <label class="form-field">
+                <span>알림 반경 (m)</span>
+                <input type="number" min="5" max="1000" step="5" id="input-radius" value="50" />
+              </label>
+            </div>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <!-- 2. 음성 확인 -->
+    <details class="accordion-card" id="sec-voice">
+      <summary class="accordion-summary">
+        <div class="summary-title">
+          <span class="step-num">2</span>
+          <span>음성 확인</span>
+        </div>
+        <div class="summary-right">
+          <span class="status-pill status-idle" id="audio-unlock-pill">활성화 필요</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </div>
+      </summary>
+
+      <div class="accordion-body">
+        <div class="control-group">
+          <button type="button" class="btn btn-primary btn-full" id="btn-unlock-audio">음성/오디오 활성화 (모바일 필수)</button>
+          <div class="btn-grid btn-grid-3">
+            <button type="button" class="btn btn-sm btn-outline" id="btn-test-tts">TTS 재생</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-test-beep">효과음</button>
+            <button type="button" class="btn btn-sm btn-outline" id="btn-test-vibrate">진동</button>
+          </div>
+        </div>
+
+        <p class="help-text">무음/방해금지 모드에서는 음성·진동이 꺼질 수 있으니 소리/진동 모드에서 확인하세요.</p>
+
+        <div class="form-grid form-grid-2">
+          <label class="form-field form-field-full">
+            <span>안내 음성 문구</span>
+            <input type="text" id="input-tts-text" value="목적지 반경 50미터 이내에 진입했습니다." />
+          </label>
+          <label class="form-field">
+            <span>한국어 음성</span>
+            <select id="select-voice">
+              <option value="">브라우저 기본 (ko-KR)</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>속도 (<span id="val-rate">1.0</span>x)</span>
+            <input type="range" id="input-rate" min="0.7" max="1.5" step="0.1" value="1.0" />
+          </label>
+        </div>
+
+        <div class="checkbox-group">
+          <label class="checkbox-inline">
+            <input type="checkbox" id="chk-auto-tts" checked /> 50m 진입 시 TTS
+          </label>
+          <label class="checkbox-inline">
+            <input type="checkbox" id="chk-auto-beep" checked /> 효과음
+          </label>
+          <label class="checkbox-inline">
+            <input type="checkbox" id="chk-auto-vibrate" checked /> 진동 (Android)
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <!-- 3. 카메라 · 사진 업로드 -->
+    <details class="accordion-card" id="sec-camera">
+      <summary class="accordion-summary">
+        <div class="summary-title">
+          <span class="step-num">3</span>
+          <span>카메라 · 사진 업로드</span>
+        </div>
+        <div class="summary-right">
+          <span class="status-pill status-idle" id="camera-status-pill">꺼짐</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </div>
+      </summary>
+
+      <div class="accordion-body">
+        <div class="control-group">
+          <div class="btn-grid btn-grid-2">
+            <button type="button" class="btn btn-primary" id="btn-cam-back">후면 카메라</button>
+            <button type="button" class="btn btn-outline" id="btn-cam-front">전면 카메라</button>
+          </div>
+          <div class="btn-grid btn-grid-2">
+            <button type="button" class="btn btn-sm btn-accent" id="btn-cam-capture" disabled>사진 캡처</button>
+            <button type="button" class="btn btn-sm btn-danger" id="btn-cam-stop" disabled>카메라 종료</button>
+          </div>
+          <div class="btn-grid btn-grid-2">
+            <label class="btn btn-sm btn-secondary file-input-label">
+              기본 카메라 앱 촬영
+              <input type="file" id="input-native-camera" accept="image/*" capture="environment" />
+            </label>
+            <label class="btn btn-sm btn-outline file-input-label">
+              앨범 / 파일 선택
+              <input type="file" id="input-file-upload" accept="image/*" />
+            </label>
+          </div>
+        </div>
+
+        <!-- 카메라 권한/오류 안내 패널 -->
+        <div id="camera-error-box" class="alert alert-danger hidden"></div>
+
+        <div class="camera-meta" id="camera-meta">스트림 정보: 미실행</div>
+
+        <div class="video-wrapper">
+          <video id="camera-video" autoplay playsinline muted></video>
+          <div class="video-placeholder" id="video-placeholder">카메라를 켜거나 아래에서 사진을 촬영·선택하세요.</div>
+        </div>
+
+        <div id="capture-result" class="capture-result hidden">
+          <div class="capture-header">
+            <strong id="capture-source-label">준비된 사진</strong>
+            <div class="capture-actions">
+              <a id="btn-download-photo" class="btn btn-sm btn-outline" download="camera-test.jpg">저장</a>
+              <button type="button" id="btn-clear-photo" class="btn btn-sm btn-secondary">지우기</button>
+            </div>
+          </div>
+          <img id="captured-image" alt="업로드 대기 테스트 이미지" />
+          <p class="help-text capture-meta-text" id="capture-meta"></p>
+
+          <!-- 사진 업로드 테스트 영역 -->
+          <div class="upload-panel" id="upload-panel">
+            <div class="upload-panel-header">
+              <strong>사진 업로드 테스트</strong>
+              <span class="status-pill status-idle" id="upload-status-pill">대기 중</span>
+            </div>
+
+            <div class="segment-control" role="radiogroup" aria-label="업로드 방식 선택">
+              <label class="segment-option">
+                <input type="radio" name="upload-mode" value="mock" id="upload-mode-mock" checked />
+                <span>모의 업로드 (로컬)</span>
+              </label>
+              <label class="segment-option">
+                <input type="radio" name="upload-mode" value="real" id="upload-mode-real" />
+                <span>실제 서버 (POST)</span>
+              </label>
+            </div>
+
+            <div id="upload-server-fields" class="form-grid form-grid-2 hidden">
+              <label class="form-field form-field-full">
+                <span>업로드 엔드포인트 URL (multipart/form-data)</span>
+                <input type="url" id="input-upload-url" placeholder="https://httpbin.org/post 또는 백엔드 OCR API 주소" />
+              </label>
+              <label class="form-field">
+                <span>FormData 필드명</span>
+                <input type="text" id="input-upload-field" value="file" />
+              </label>
+              <label class="form-field">
+                <span>타임아웃 (초)</span>
+                <input type="number" id="input-upload-timeout" min="3" max="120" value="20" />
+              </label>
+            </div>
+
+            <label class="checkbox-inline upload-resize-check">
+              <input type="checkbox" id="chk-upload-resize" checked />
+              업로드 전 자동 리사이즈 (긴 변 최대 1600px, JPEG 압축)
+            </label>
+
+            <button type="button" class="btn btn-primary btn-full" id="btn-upload-photo">사진 업로드 실행</button>
+
+            <div id="upload-progress-wrap" class="upload-progress-wrap hidden">
+              <div class="progress-track">
+                <div class="progress-bar" id="upload-progress-bar" style="width: 0%"></div>
+              </div>
+              <span class="upload-progress-text" id="upload-progress-text">0%</span>
+            </div>
+
+            <div id="upload-result-box" class="alert hidden"></div>
+          </div>
+        </div>
+
+        <div id="upload-history-wrap" class="upload-history-wrap hidden">
+          <div class="upload-history-header">
+            <span>최근 업로드 기록</span>
+            <button type="button" class="btn btn-sm btn-secondary" id="btn-clear-history">기록 비우기</button>
+          </div>
+          <div id="upload-history-list" class="upload-history-list"></div>
+        </div>
+      </div>
+    </details>
+
+    <div class="section-divider-label">진단 및 기록</div>
+
+    <!-- 접속 환경 -->
+    <details class="accordion-card accordion-secondary" id="sec-env">
+      <summary class="accordion-summary">
+        <div class="summary-title">
+          <span>접속 환경</span>
+        </div>
+        <div class="summary-right">
+          <span class="status-pill status-idle" id="env-summary-pill">확인 중</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </div>
+      </summary>
+
+      <div class="accordion-body">
+        <div class="btn-row-end">
+          <button type="button" class="btn btn-sm btn-outline" id="btn-refresh-perm">권한 상태 새로고침</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="btn-copy-env">환경 정보 복사</button>
+        </div>
+        <div class="env-grid" id="env-grid"></div>
+        <div class="badge-list" id="capability-badges"></div>
+      </div>
+    </details>
+
+    <!-- 실시간 로그 -->
+    <details class="accordion-card accordion-secondary" id="sec-log">
+      <summary class="accordion-summary">
+        <div class="summary-title">
+          <span>실시간 로그</span>
+        </div>
+        <div class="summary-right">
+          <span class="status-pill status-idle" id="log-count-pill">0건</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </div>
+      </summary>
+
+      <div class="accordion-body">
+        <div class="btn-row-end">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-copy-log">리포트 복사</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="btn-clear-log">지우기</button>
+        </div>
+        <div class="log-box" id="log-box" aria-live="polite"></div>
+      </div>
+    </details>
+  </main>
+
+  <footer class="app-footer">
+    <p>기본 모의 테스트 데이터는 브라우저 로컬에서만 처리되며, 실제 서버 URL을 직접 입력한 경우에만 해당 주소로 업로드됩니다.</p>
+  </footer>
+
+  <canvas id="capture-canvas" class="hidden"></canvas>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

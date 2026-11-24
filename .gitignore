@@ -1,0 +1,23 @@
+# 민감한 환경 변수 및 키 파일
+.env
+.env.*
+*.pem
+*.key
+secrets.*
+
+# 테스트 중 저장한 개인 사진 / 로그 / 리포트
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.log
+qa-report*.md
+test-results/
+
+# OS / 에디터 임시 파일
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+node_modules/
